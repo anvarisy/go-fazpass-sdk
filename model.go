@@ -27,6 +27,8 @@ type Device struct {
 	Name            string      `json:"name"`
 	SimSerial       []string    `json:"sim_serial"`
 	Geolocation     Geolocation `json:"geolocation"`
+	CPU             string      `json:"cpu"`
+	Timezone        string      `json:"timezone"`
 }
 
 type Transmission struct {
