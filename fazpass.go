@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 
@@ -101,11 +100,8 @@ func sendToServer(f *Fazpass, model interface{}, urls string) (*Data, error) {
 	if err != nil {
 		return data, errors.New("parameter cannot be empty")
 	}
-	marshalledCheck, err := json.Marshal(model)
-	if err != nil {
-		return data, err
-	}
-	encrypted := encryptWithPublicKey(marshalledCheck, f.PublicKey)
+	marshalledCheck, _ := json.Marshal(model)
+	encrypted, _ := encryptWithPublicKey(marshalledCheck, f.PublicKey)
 	message := base64.StdEncoding.EncodeToString([]byte(encrypted))
 	marshalledMessage, _ := json.Marshal(&Transmission{Message: message})
 	request, err := http.NewRequest("POST", f.BaseUrl+urls, bytes.NewReader(marshalledMessage))
@@ -125,7 +121,7 @@ func sendToServer(f *Fazpass, model interface{}, urls string) (*Data, error) {
 	json.Unmarshal(messageBodyResponse, transmissionResponse)
 	decryptMessage, err := base64.StdEncoding.DecodeString(string(transmissionResponse.Message))
 
-	decrypted := decryptWithPrivateKey(decryptMessage, f.PrivateKey)
+	decrypted, _ := decryptWithPrivateKey(decryptMessage, f.PrivateKey)
 	json.Unmarshal(decrypted, data)
 	fmt.Print(data.SessionId)
 	if err != nil {
@@ -147,28 +143,19 @@ func bytesToPublicKey(pub []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(pub)
 	b := block.Bytes
 	ifc, err := x509.ParsePKIXPublicKey(b)
-	key, ok := ifc.(*rsa.PublicKey)
-	if !ok {
-		log.Println("not ok")
-	}
+	key, _ := ifc.(*rsa.PublicKey)
 	return key, err
 }
 
 // EncryptWithPublicKey encrypts data with public key
-func encryptWithPublicKey(msg []byte, pub *rsa.PublicKey) []byte {
+func encryptWithPublicKey(msg []byte, pub *rsa.PublicKey) ([]byte, error) {
 	ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, pub, msg)
-	if err != nil {
-		log.Println(err)
-	}
-	return ciphertext
+	return ciphertext, err
 
 }
 
 // DecryptWithPrivateKey decrypts data with private key
-func decryptWithPrivateKey(ciphertext []byte, priv *rsa.PrivateKey) []byte {
+func decryptWithPrivateKey(ciphertext []byte, priv *rsa.PrivateKey) ([]byte, error) {
 	plaintext, err := rsa.DecryptPKCS1v15(rand.Reader, priv, ciphertext)
-	if err != nil {
-		log.Println(err)
-	}
-	return plaintext
+	return plaintext, err
 }

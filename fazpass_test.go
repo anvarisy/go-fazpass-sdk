@@ -1,11 +1,26 @@
 package fazpass
 
 import (
+	"crypto/rsa"
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+func TestInitialize(t *testing.T) {
+	t.Run("Private key not found", func(t *testing.T) {
+		_, err := Initialize("key", "key.pub", "MERCHANT_KEY", "http://localhost:8080")
+		assert.Equal(t, err.Error(), "file not found")
+	})
+
+	t.Run("Public key not found", func(t *testing.T) {
+		_, err := Initialize("key.priv", "", "MERCHANT_KEY", "http://localhost:8080")
+		assert.Equal(t, err.Error(), "file not found")
+	})
+}
 
 func TestCheck(t *testing.T) {
 	t.Run("Initialize failed", func(t *testing.T) {
@@ -20,9 +35,14 @@ func TestCheck(t *testing.T) {
 	t.Run("Check success", func(t *testing.T) {
 		f, _ := Initialize("key.priv", "key.pub", "MERCHANT_KEY", "http://localhost:8080")
 		var fm = new(FazpassMock)
+		var privKey *rsa.PrivateKey
+		priv, _ := os.ReadFile("key.priv")
+		privKey, _ = bytesToPrivateKey(priv)
 		fm.On("Check", mock.Anything, mock.Anything, mock.Anything).Return(&Data{}, nil)
-		_, err := f.Check("anvarisy@gmail.com", "085811752000", "KOALA_PANDA")
-		assert.Equal(t, err, nil)
+		data, _ := f.Check("anvarisy@gmail.com", "085811752000", "KOALA_PANDA")
+		dataMarshal, _ := json.Marshal(data)
+		_, err := decryptWithPrivateKey(dataMarshal, privKey)
+		assert.NotEqual(t, err, nil)
 	})
 
 }
