@@ -26,3 +26,33 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18'
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup golangci-lint
+        uses: golangci/golangci-lint-action@v3.4.0
+        with:
+          version: v1.52.2
+          args: --verbose
+  
+  codecov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: codecov/codecov-action@v3
+        with:
+          token: 7809262d-c62c-43d3-a345-6f0fb6b9577f
+          files: ./coverage1.xml,./coverage2.xml # optional
+          flags: unittests # optional
+          name: codecov-umbrella # optional
+          fail_ci_if_error: true # optional (default = false)
+          verbose: true # optional (default = false)
+    
+
