@@ -32,6 +32,10 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+      ignore:
+        - "flow_mock.go"
+        - "utils.go"
+
   
   # codecov:
   #   runs-on: ubuntu-latest

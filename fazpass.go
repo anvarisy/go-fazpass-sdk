@@ -1,17 +1,8 @@
 package fazpass
 
 import (
-	"bytes"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 
 	govalidator "github.com/go-playground/validator/v10"
@@ -30,9 +21,10 @@ type Fazpass struct {
 	PublicKey   *rsa.PublicKey
 	MerchantKey string
 	BaseUrl     string
+	Flow        FlowInterface
 }
 
-func Initialize(privatePath string, publicPath string, merchantKey string, url string) (FazpassInterface, error) {
+func Initialize(flow FlowInterface, privatePath string, publicPath string, merchantKey string, url string) (FazpassInterface, error) {
 	var err error
 	var privKey *rsa.PrivateKey
 	var pubKey *rsa.PublicKey
@@ -51,6 +43,7 @@ func Initialize(privatePath string, publicPath string, merchantKey string, url s
 	f.MerchantKey = merchantKey
 	f.PrivateKey = privKey
 	f.PublicKey = pubKey
+	f.Flow = flow
 	return f, err
 }
 
@@ -60,8 +53,26 @@ func (f *Fazpass) Check(email string, phone string, encData string) (*Data, erro
 		Phone: phone,
 		Data:  encData,
 	}
-	data, err := sendToServer(f, check, "/check")
-	return data, err
+	data := &Data{}
+	validator := govalidator.New()
+	err := validator.Struct(check)
+	if err != nil {
+		return data, errors.New("parameter cannot be empty")
+	}
+
+	wrappedMessage, err := f.Flow.wrapingData(f, check)
+	if err != nil {
+		return data, err
+	}
+	response, err := f.Flow.sendingData(f, wrappedMessage, "/check")
+	if err != nil {
+		return data, err
+	}
+	data, err = f.Flow.extractingData(f, response, data)
+	if err != nil {
+		return data, err
+	}
+	return data, nil
 }
 
 func (f *Fazpass) EnrollDevice(email string, phone string, encData string) (*Data, error) {
@@ -70,8 +81,26 @@ func (f *Fazpass) EnrollDevice(email string, phone string, encData string) (*Dat
 		Phone: phone,
 		Data:  encData,
 	}
-	data, err := sendToServer(f, enroll, "/enroll")
-	return data, err
+	data := &Data{}
+	validator := govalidator.New()
+	err := validator.Struct(enroll)
+	if err != nil {
+		return data, errors.New("parameter cannot be empty")
+	}
+
+	wrappedMessage, err := f.Flow.wrapingData(f, enroll)
+	if err != nil {
+		return data, err
+	}
+	response, err := f.Flow.sendingData(f, wrappedMessage, "/enroll")
+	if err != nil {
+		return data, err
+	}
+	data, err = f.Flow.extractingData(f, response, data)
+	if err != nil {
+		return data, err
+	}
+	return data, nil
 }
 
 func (f *Fazpass) ValidateDevice(fazpassId string, encData string) (*Data, error) {
@@ -79,8 +108,26 @@ func (f *Fazpass) ValidateDevice(fazpassId string, encData string) (*Data, error
 		FazpassId: fazpassId,
 		Data:      encData,
 	}
-	data, err := sendToServer(f, validate, "/validate")
-	return data, err
+	data := &Data{}
+	validator := govalidator.New()
+	err := validator.Struct(validate)
+	if err != nil {
+		return data, errors.New("parameter cannot be empty")
+	}
+
+	wrappedMessage, err := f.Flow.wrapingData(f, validate)
+	if err != nil {
+		return data, err
+	}
+	response, err := f.Flow.sendingData(f, wrappedMessage, "/validate")
+	if err != nil {
+		return data, err
+	}
+	data, err = f.Flow.extractingData(f, response, data)
+	if err != nil {
+		return data, err
+	}
+	return data, nil
 }
 
 func (f *Fazpass) RemoveDevice(fazpassId string, encData string) (*Data, error) {
@@ -88,74 +135,24 @@ func (f *Fazpass) RemoveDevice(fazpassId string, encData string) (*Data, error) 
 		FazpassId: fazpassId,
 		Data:      encData,
 	}
-	data, err := sendToServer(f, remove, "/remove")
-	return data, err
-}
-
-func sendToServer(f *Fazpass, model interface{}, urls string) (*Data, error) {
-	client := &http.Client{}
 	data := &Data{}
 	validator := govalidator.New()
-	err := validator.Struct(model)
+	err := validator.Struct(remove)
 	if err != nil {
 		return data, errors.New("parameter cannot be empty")
 	}
-	marshalledCheck, _ := json.Marshal(model)
-	encrypted, _ := encryptWithPublicKey(marshalledCheck, f.PublicKey)
-	message := base64.StdEncoding.EncodeToString([]byte(encrypted))
-	marshalledMessage, _ := json.Marshal(&Transmission{Message: message})
-	request, err := http.NewRequest("POST", f.BaseUrl+urls, bytes.NewReader(marshalledMessage))
+
+	wrappedMessage, err := f.Flow.wrapingData(f, remove)
 	if err != nil {
 		return data, err
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+f.MerchantKey)
-	response, err := client.Do(request)
-	if err != nil {
-		return data, nil
-	}
-	defer response.Body.Close()
-
-	messageBodyResponse, _ := io.ReadAll(response.Body)
-	transmissionResponse := &Transmission{}
-	json.Unmarshal(messageBodyResponse, transmissionResponse)
-	decryptMessage, err := base64.StdEncoding.DecodeString(string(transmissionResponse.Message))
-
-	decrypted, _ := decryptWithPrivateKey(decryptMessage, f.PrivateKey)
-	json.Unmarshal(decrypted, data)
-	fmt.Print(data.SessionId)
+	response, err := f.Flow.sendingData(f, wrappedMessage, "/remove")
 	if err != nil {
 		return data, err
 	}
-
+	data, err = f.Flow.extractingData(f, response, data)
+	if err != nil {
+		return data, err
+	}
 	return data, nil
-}
-
-func bytesToPrivateKey(priv []byte) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode(priv)
-	b := block.Bytes
-	key, err := x509.ParsePKCS1PrivateKey(b)
-	return key, err
-}
-
-// BytesToPublicKey bytes to public key
-func bytesToPublicKey(pub []byte) (*rsa.PublicKey, error) {
-	block, _ := pem.Decode(pub)
-	b := block.Bytes
-	ifc, err := x509.ParsePKIXPublicKey(b)
-	key, _ := ifc.(*rsa.PublicKey)
-	return key, err
-}
-
-// EncryptWithPublicKey encrypts data with public key
-func encryptWithPublicKey(msg []byte, pub *rsa.PublicKey) ([]byte, error) {
-	ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, pub, msg)
-	return ciphertext, err
-
-}
-
-// DecryptWithPrivateKey decrypts data with private key
-func decryptWithPrivateKey(ciphertext []byte, priv *rsa.PrivateKey) ([]byte, error) {
-	plaintext, err := rsa.DecryptPKCS1v15(rand.Reader, priv, ciphertext)
-	return plaintext, err
 }
