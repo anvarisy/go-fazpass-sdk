@@ -5,11 +5,12 @@ import (
 	"errors"
 	"os"
 
+	"github.com/anvarisy/go-fazpass-sdk/utils"
+
 	govalidator "github.com/go-playground/validator/v10"
 )
 
 type FazpassInterface interface {
-	// Initialize(privatePath string, publicPath string, merchantKey string, url string) (*Fazpass, error)
 	Check(email string, phone string, encData string) (*Data, error)
 	EnrollDevice(email string, phone string, encData string) (*Data, error)
 	ValidateDevice(fazpassId string, encData string) (*Data, error)
@@ -33,12 +34,12 @@ func Initialize(flow FlowInterface, privatePath string, publicPath string, merch
 	if errFile != nil {
 		return f, errors.New("file not found")
 	}
-	privKey, _ = bytesToPrivateKey(priv)
+	privKey, _ = utils.BytesToPrivateKey(priv)
 	pub, errFile := os.ReadFile(publicPath)
 	if errFile != nil {
 		return f, errors.New("file not found")
 	}
-	pubKey, _ = bytesToPublicKey(pub)
+	pubKey, _ = utils.BytesToPublicKey(pub)
 	f.BaseUrl = url
 	f.MerchantKey = merchantKey
 	f.PrivateKey = privKey
@@ -60,15 +61,15 @@ func (f *Fazpass) Check(email string, phone string, encData string) (*Data, erro
 		return data, errors.New("parameter cannot be empty")
 	}
 
-	wrappedMessage, err := f.Flow.wrapingData(f, check)
+	wrappedMessage, err := f.Flow.WrappingData(f.PublicKey, check)
 	if err != nil {
 		return data, err
 	}
-	response, err := f.Flow.sendingData(f, wrappedMessage, "/check")
+	response, err := f.Flow.SendingData(f.BaseUrl+"/check", wrappedMessage, f.MerchantKey)
 	if err != nil {
 		return data, err
 	}
-	data, err = f.Flow.extractingData(f, response, data)
+	data, err = f.Flow.ExtractingData(f.PrivateKey, response, data)
 	if err != nil {
 		return data, err
 	}
@@ -88,15 +89,15 @@ func (f *Fazpass) EnrollDevice(email string, phone string, encData string) (*Dat
 		return data, errors.New("parameter cannot be empty")
 	}
 
-	wrappedMessage, err := f.Flow.wrapingData(f, enroll)
+	wrappedMessage, err := f.Flow.WrappingData(f.PublicKey, enroll)
 	if err != nil {
 		return data, err
 	}
-	response, err := f.Flow.sendingData(f, wrappedMessage, "/enroll")
+	response, err := f.Flow.SendingData(f.BaseUrl+"/enroll", wrappedMessage, f.MerchantKey)
 	if err != nil {
 		return data, err
 	}
-	data, err = f.Flow.extractingData(f, response, data)
+	data, err = f.Flow.ExtractingData(f.PrivateKey, response, data)
 	if err != nil {
 		return data, err
 	}
@@ -115,15 +116,15 @@ func (f *Fazpass) ValidateDevice(fazpassId string, encData string) (*Data, error
 		return data, errors.New("parameter cannot be empty")
 	}
 
-	wrappedMessage, err := f.Flow.wrapingData(f, validate)
+	wrappedMessage, err := f.Flow.WrappingData(f.PublicKey, validate)
 	if err != nil {
 		return data, err
 	}
-	response, err := f.Flow.sendingData(f, wrappedMessage, "/validate")
+	response, err := f.Flow.SendingData(f.BaseUrl+"/validate", wrappedMessage, f.MerchantKey)
 	if err != nil {
 		return data, err
 	}
-	data, err = f.Flow.extractingData(f, response, data)
+	data, err = f.Flow.ExtractingData(f.PrivateKey, response, data)
 	if err != nil {
 		return data, err
 	}
@@ -142,15 +143,15 @@ func (f *Fazpass) RemoveDevice(fazpassId string, encData string) (*Data, error) 
 		return data, errors.New("parameter cannot be empty")
 	}
 
-	wrappedMessage, err := f.Flow.wrapingData(f, remove)
+	wrappedMessage, err := f.Flow.WrappingData(f.PublicKey, remove)
 	if err != nil {
 		return data, err
 	}
-	response, err := f.Flow.sendingData(f, wrappedMessage, "/remove")
+	response, err := f.Flow.SendingData(f.BaseUrl+"/remove", wrappedMessage, f.MerchantKey)
 	if err != nil {
 		return data, err
 	}
-	data, err = f.Flow.extractingData(f, response, data)
+	data, err = f.Flow.ExtractingData(f.PrivateKey, response, data)
 	if err != nil {
 		return data, err
 	}
